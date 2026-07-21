@@ -53,7 +53,7 @@ def _ดึงราคาดิบ():
                         headers=HEADERS, timeout=30)
     resp.raise_for_status()
     recs = resp.json()["result"]["records"]   # ถ้าตอบไม่ใช่ JSON จะ error แล้วไปใช้ค่าสำรอง
-    ราคา = pd.DataFrame(recs).rename(columns={"เกษตรสำคัญบึงกาฬ": "สินค้า", "ค่า": "ราคา"})
+    ราคา = pd.DataFrame(recs).rename(columns={"เกษตรสำคัญเชียงใหม่": "สินค้า", "ค่า": "ราคา"})
     ราคา["ราคา"] = pd.to_numeric(ราคา["ราคา"], errors="coerce")
     return ราคา
 
@@ -63,9 +63,18 @@ def ดึงราคาเกษตร():
         return _ดึงราคาดิบ(), True
     except Exception:
         return None, False
-
-แท็บอากาศ, แท็บน้ำ, แท็บราคา = st.tabs(
-    ["สภาพอากาศ", "ระดับน้ำแม่น้ำ", "ราคาสินค้าเกษตร"])
+def ดึงผลผลิตเชียงใหม่():
+    URL = "https://data.go.th/api/3/action/datastore_search"
+    RESOURCE_ID = "ใส่ resource_id ของชุดข้อมูลผลผลิตเชียงใหม่"
+    resp = requests.get(URL, params={"resource_id": RESOURCE_ID, "limit": 5000},
+                        headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    recs = resp.json()["result"]["records"]
+    df = pd.DataFrame(recs).rename(columns={"สินค้า": "สินค้า", "ผลผลิต": "ผลผลิต"})
+    df["ผลผลิต"] = pd.to_numeric(df["ผลผลิต"], errors="coerce")
+    return df
+แท็บอากาศ, แท็บน้ำ, แท็บราคา ,แท็บผลผลิต= st.tabs(
+    ["สภาพอากาศ", "ระดับน้ำแม่น้ำ", "ราคาสินค้าเกษตร","จำนวนผลผลิต"])
 
 # ---------- แท็บ 1: สภาพอากาศ (Open-Meteo) ----------
 with แท็บอากาศ:
@@ -121,7 +130,7 @@ with แท็บราคา:
         ค่าเริ่ม = [s for s in ["ทุเรียนหมอนทองคละ", "เงาะโรงเรียนคละ", "ยางแผ่นดิบชั้น 3"]
                    if s in สินค้าทั้งหมด]
         เลือก = st.multiselect("เลือกสินค้าที่จะดู", สินค้าทั้งหมด, default=ค่าเริ่ม)
-        st.caption(f"ข้อมูลล่าสุดปี พ.ศ. {ปีล่าสุด} — สถิติทางการรายเดือน (จ.บึงกาฬ) หน่วย บาท/กก.")
+        st.caption(f"ข้อมูลล่าสุดปี พ.ศ. {ปีล่าสุด} — สถิติทางการรายเดือน (จ.เชียงใหม่) หน่วย บาท/กก.")
         เดือนเรียง = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
                      "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
         if เลือก:
@@ -139,3 +148,18 @@ with แท็บราคา:
             st.dataframe(แถวล่าสุด)
         else:
             st.warning("เลือกสินค้าอย่างน้อย 1 อย่าง")
+with แท็บผลผลิต:
+    st.subheader("จำนวนผลผลิตสินค้าเกษตร จังหวัดเชียงใหม่")
+    try:
+        ผลผลิต = ดึงผลผลิตเชียงใหม่()
+        สินค้าทั้งหมด = sorted(ผลผลิต["สินค้า"].dropna().unique())
+        เลือก = st.multiselect("เลือกสินค้าที่จะดู", สินค้าทั้งหมด, default=สินค้าทั้งหมด[:3])
+        if เลือก:
+            ตาราง = ผลผลิต[ผลผลิต["สินค้า"].isin(เลือก)]
+            st.bar_chart(ตาราง.set_index("สินค้า")["ผลผลิต"])
+            st.dataframe(ตาราง, hide_index=True)
+        else:
+            st.warning("เลือกสินค้าอย่างน้อย 1 อย่าง")
+    except Exception as e:
+        st.error(f"ดึงข้อมูลผลผลิตไม่สำเร็จ (สาเหตุ: {e})")
+
